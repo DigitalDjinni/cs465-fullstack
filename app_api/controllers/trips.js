@@ -1,59 +1,41 @@
 const mongoose = require('mongoose');
-const Trip = require('../models/travlr'); // Register model
+const Trip = require('../models/travlr');
 const Model = mongoose.model('trips');
+const User = mongoose.model('users');
 
 // GET: /trips - list all the trips
-// Regardless of outcome, response must include HTML status code
-// and JSON message to the requesting client
 const tripsList = async (req, res) => {
-    const q = await Model
-        .find({}) // No filter, return all records
-        .exec();
-
-    // Uncomment the following line to show results of query
-    // on the console
-    // console.log(q);
-
-    if (!q) { // Database returned no data
-        return res
-            .status(404)
-            .json(err);
-    } else { // Return resulting trip list
-        return res
-            .status(200)
-            .json(q);
+    try {
+        const q = await Model.find({}).exec();
+        if (!q) {
+            return res.status(404).json({ message: "No trips found" });
+        }
+        return res.status(200).json(q);
+    } catch (err) {
+        return res.status(500).json(err);
     }
 };
 
 // GET: /trips/:tripCode - list a single trip
-// Regardless of outcome, response must include HTML status code
-// and JSON message to the requesting client
 const tripsFindByCode = async (req, res) => {
-    const q = await Model
-        .find({'code' : req.params.tripCode}) // Return single record
-        .exec();
-
-    // Uncomment the following line to show results of query
-    // on the console
-    // console.log(q);
-
-    if (!q) { // Database returned no data
-        return res
-            .status(404)
-            .json(err);
-    } else { // Return resulting trip list
-        return res
-            .status(200)
-            .json(q);
+    try {
+        const q = await Model.find({ 'code': req.params.tripCode }).exec();
+        if (!q) {
+            return res.status(404).json({ message: "Trip not found" });
+        }
+        return res.status(200).json(q);
+    } catch (err) {
+        return res.status(500).json(err);
     }
 };
 
 // POST: /trips - Add a new trip
-// Regardless of outcome, response must include HTML status code
-// and JSON message to the requesting client
 const tripsAddTrip = async (req, res) => {
     try {
-        const newTrip = new Trip({
+        const user = await getUser(req, res);
+        if (!user) return; // getUser will have sent the response
+
+        const trip = await Trip.create({
             code: req.body.code,
             name: req.body.name,
             length: req.body.length,
@@ -64,70 +46,70 @@ const tripsAddTrip = async (req, res) => {
             description: req.body.description
         });
 
-        const q = await newTrip.save();
-
-        if (!q) { // Database returned no data
-            return res
-                .status(400)
-                .json({ message: "Failed to create trip" });
-        } else { // Return new trip
-            return res
-                .status(201)
-                .json(q);
-        }
+        return res.status(201).json(trip);
     } catch (err) {
-        return res
-            .status(500)
-            .json(err);
+        return res.status(400).json(err);
     }
 };
 
-// PUT: /trips/:tripCode - Adds a new Trip
-// Regardless of outcome, response must include HTML status code
-// and JSON message to the requesting client
-const tripsUpdateTrip = async(req, res) => {
+// PUT: /trips/:tripCode - Updates a Trip
+const tripsUpdateTrip = async (req, res) => {
+    try {
+        const user = await getUser(req, res);
+        if (!user) return; // getUser will have sent the response
 
-    // Uncomment for debugging
-    console.log(req.params);
-    console.log(req.body);
-  
-    const q = await Model
-      .findOneAndUpdate(
-        { 'code': req.params.tripCode },
-        {
-          code: req.body.code,
-          name: req.body.name,
-          length: req.body.length,
-          start: req.body.start,
-          resort: req.body.resort,
-          perPerson: req.body.perPerson,
-          image: req.body.image,
-          description: req.body.description
+        const trip = await Trip.findOneAndUpdate(
+            { 'code': req.params.tripCode },
+            {
+                code: req.body.code,
+                name: req.body.name,
+                length: req.body.length,
+                start: req.body.start,
+                resort: req.body.resort,
+                perPerson: req.body.perPerson,
+                image: req.body.image,
+                description: req.body.description
+            },
+            { new: true }
+        ).exec();
+
+        if (!trip) {
+            return res.status(404).json({
+                message: "Trip not found with code " + req.params.tripCode
+            });
         }
-      )
-      .exec();
-  
-    if (!q) { 
-      // Database returned no data
-      return res
-        .status(400)
-        .json(err);
-    } else { 
-      // Return resulting updated trip
-      return res
-        .status(201)
-        .json(q);
+        return res.status(200).json(trip);
+    } catch (err) {
+        if (err.kind === 'ObjectId') {
+            return res.status(404).json({
+                message: "Trip not found with code " + req.params.tripCode
+            });
+        }
+        return res.status(500).json(err);
     }
-  
-    // Uncomment the following line to show results of operation
-    // on the console
-    // console.log(q);
-  };
-  
+};
+
+const getUser = async (req, res) => {
+    if (!req.auth || !req.auth.email) {
+        return res.status(404).json({ "message": "User not found" });
+    }
+
+    try {
+        const user = await User.findOne({ email: req.auth.email }).exec();
+        if (!user) {
+            return res.status(404).json({ "message": "User not found" });
+        }
+        return user;
+    } catch (err) {
+        console.log(err);
+        return res.status(500).json(err);
+    }
+};
 
 module.exports = {
     tripsList,
     tripsFindByCode,
     tripsAddTrip,
-    tripsUpdateTrip
+    tripsUpdateTrip,
+    getUser
 };
